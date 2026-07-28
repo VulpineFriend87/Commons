@@ -1,0 +1,20 @@
+metadata.format.version = "1.1"
+
+[versions]
+
+# Paper API
+# Compiled against the oldest supported platform. 1.18.2 brings adventure-bom 4.11.0,
+# which is the first version with MiniMessage and TagResolver in the Paper API.
+paper = "1.18.2-R0.1-SNAPSHOT"
+
+# Testing
+junit = "6.0.1"
+
+[libraries]
+
+# CompileOnly Dependencies
+paper = { group = "io.papermc.paper", name = "paper-api", version.ref = "paper" }
+
+# Testing
+junit = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+junit-launcher = { module = "org.junit.platform:junit-platform-launcher" }
