@@ -36,7 +36,7 @@ publishing {
     repositories {
         maven {
             name = "vulpine"
-            url = uri("https://repo.vulpine.top/repository/maven-releases/")
+            url = uri("https://repo.vulpine.top/repository/maven-open/")
             credentials(PasswordCredentials::class)
         }
     }
