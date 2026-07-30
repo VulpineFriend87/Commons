@@ -7,22 +7,18 @@ import java.util.regex.Pattern;
  * Rewrites legacy colour codes into their MiniMessage equivalents, so that
  * everything downstream can assume a single syntax.
  *
- * <p><strong>This runs unconditionally in {@link Dialect#LEGACY}.</strong> That is
- * the whole point of the class, and it is worth saying why: the obvious-looking
- * alternative is to sniff the string ("does it contain a {@code <tag>}?") and pick
- * a parser. That makes the meaning of {@code &7} depend on whether some
- * <em>unrelated part of the same string</em> happens to contain angle brackets —
- * so concatenating a MiniMessage prefix onto a legacy message silently changes how
- * the message is parsed. Converting every time removes the question.</p>
+ * <p>Conversion runs unconditionally in {@link Dialect#LEGACY}, rather than only when
+ * the string looks legacy. Deciding per string — "does it contain a {@code <tag>}?" —
+ * would make the meaning of {@code &7} depend on whether some <em>unrelated part of
+ * the same string</em> contains angle brackets, so appending a MiniMessage prefix to a
+ * legacy message would change how the message parses.</p>
  *
  * <h2>Known limitation</h2>
  * <p>Legacy treats a colour code as a full reset of formatting, so {@code &l&aX} is
  * green and <em>not</em> bold. MiniMessage nests instead, so the converted
- * {@code <bold><green>X} is bold green. Strings that rely on the legacy reset
- * behaviour will therefore render with extra formatting. This matches the
- * behaviour of the per-plugin converters this class replaces, so extracting it
- * changes nothing; it is documented rather than fixed because emulating legacy
- * reset semantics requires tracking state across the whole string.</p>
+ * {@code <bold><green>X} is bold green. Strings that rely on the legacy reset will
+ * render with extra formatting. Emulating it would mean tracking state across the whole
+ * string, so it is documented rather than worked around.</p>
  */
 public final class LegacyConverter {
 

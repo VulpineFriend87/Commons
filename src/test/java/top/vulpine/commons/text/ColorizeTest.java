@@ -48,8 +48,8 @@ class ColorizeTest {
     void legacyIsNotContextDependent() {
         Colorize.init(Dialect.LEGACY);
 
-        // The bug this library exists to kill: with sniffing, the '&7' here was only
-        // interpreted because an unrelated part of the string contained a <tag>.
+        // A legacy code must mean the same thing whether or not an unrelated part of
+        // the string contains a MiniMessage tag.
         Component withTag = Colorize.color("<red>x</red>&7y");
         Component withoutTag = Colorize.color("&7y");
 

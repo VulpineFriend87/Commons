@@ -14,11 +14,10 @@ import java.util.Objects;
  * Turns configured strings into {@link Component}s.
  *
  * <h2>Output is always a Component</h2>
- * <p>Never a String. Earlier versions of this class parsed to a Component and then
- * serialized back to a legacy string before returning, which silently discarded
- * everything legacy cannot encode — hover text, click events, fonts, translatable
- * components. Legacy serialization is a last-mile concern for APIs that demand a
- * String ({@link #toLegacy}); it does not belong in the middle of the pipeline.</p>
+ * <p>Never a String. Serializing to a legacy string loses everything legacy cannot
+ * encode — hover text, click events, fonts, translatable components — so it is a
+ * last-mile concern for APIs that will not accept a Component ({@link #toLegacy}),
+ * not something to do in the middle.</p>
  *
  * <h2>Configuration is static and per-plugin</h2>
  * <p>{@link #init} sets the dialect process-wide, which is safe because each

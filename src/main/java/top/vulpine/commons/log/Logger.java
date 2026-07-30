@@ -185,9 +185,9 @@ public final class Logger {
      * Changes the level threshold on its own, leaving the prefix and trace file
      * alone.
      *
-     * <p>Deliberately not builder-only: the level usually comes from config, so a
-     * {@code /reload} command has to change it at runtime. Re-running the builder
-     * would reopen the trace file for no reason.</p>
+     * <p>The level usually comes from config, so a {@code /reload} command needs to
+     * change it at runtime. Re-running the builder would reopen the trace file for no
+     * reason.</p>
      *
      * @param level the minimum level to emit
      */
