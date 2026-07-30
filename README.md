@@ -1,81 +1,331 @@
 # Commons
 
-Shared text, sound and logging utilities for my plugins. Requires **Paper 1.18.2+**.
+Text rendering and console logging for Paper plugins.
+
+- **`Colorize`** — turns configured strings into Adventure `Component`s, with optional
+  support for legacy `&` colour codes alongside MiniMessage.
+- **`Logger`** — a prefixed console logger with levels, an optional daily trace file,
+  and grep-friendly tags.
+
+**Requires Paper 1.18.2 or newer.** Adventure and MiniMessage come from the server.
+
+---
+
+## Contents
+
+- [Install](#install)
+- [Colorize](#colorize)
+  - [Dialects](#dialects)
+  - [Inserting values safely](#inserting-values-safely)
+  - [Converting back](#converting-back)
+- [Logger](#logger)
+  - [Setup](#setup)
+  - [Log actions](#log-actions)
+  - [Trace file](#trace-file)
+- [Full example](#full-example)
+
+---
 
 ## Install
 
 ```kotlin
 repositories {
-    maven("https://repo.vulpine.top/repository/maven-releases/")
+    maven("https://repo.papermc.io/repository/maven-public/")
+    maven("https://repo.vulpine.top/repository/maven-open/")
 }
 
 dependencies {
     implementation("top.vulpine:commons:0.1.0")
+    compileOnly("io.papermc.paper:paper-api:1.18.2-R0.1-SNAPSHOT")
+}
+
+tasks.shadowJar {
+    relocate("top.vulpine.commons", "com.example.myplugin.libs.commons")
 }
 ```
 
-Shade and **relocate** it. Do **not** relocate `net.kyori.adventure`. Paper exposes Adventure unrelocated, and
-a relocated `Component` will not satisfy Paper's own method signatures.
+Relocate `top.vulpine.commons` so two plugins on the same server do not share
+configuration. Do **not** relocate `net.kyori.adventure` — Paper provides it
+unrelocated, and a relocated `Component` will not satisfy Paper's own method
+signatures.
 
-## Text
+---
 
-Output is always a `Component`. The dialect controls what operators may type in
-config, not what the plugin can render.
+## Colorize
+
+`Colorize.color` returns a `Component`, which is what Paper's APIs accept:
 
 ```java
-Colorize.init(Dialect.MODERN);   // MiniMessage only; "&6" is literal
-Colorize.init(Dialect.LEGACY);   // also accepts &6, §6, &#RRGGBB
+Component message = Colorize.color("<green>Welcome to the server");
+
+player.sendMessage(message);
+player.sendActionBar(Colorize.color("<yellow>Loading…"));
+Bukkit.getConsoleSender().sendMessage(Colorize.color("<gray>Plugin ready"));
 ```
 
-`LEGACY` rewrites legacy codes to MiniMessage tags **unconditionally**, then parses
-once.
+Lists and arrays are handled too:
 
 ```java
-Component msg = Colorize.color("<gray>Welcome, <name>",
+List<Component> lines = Colorize.color(config.motd);      // List<String> in
+Component[] parts = Colorize.color(new String[]{"a", "b"});
+```
+
+### Dialects
+
+Call `init` once during startup to choose which syntax your config accepts:
+
+```java
+Colorize.init(Dialect.MODERN);   // MiniMessage only
+Colorize.init(Dialect.LEGACY);   // MiniMessage plus legacy & codes
+```
+
+| Dialect | `<green>x` | `&ax` | `&#ff00ffx` |
+|---|---|---|---|
+| `MODERN` | green | literal text `&ax` | literal text |
+| `LEGACY` | green | green | pink |
+
+`MODERN` is the default and the right choice for a new plugin. Use `LEGACY` when
+server owners already have `&` codes in their config files from an earlier version.
+
+In `LEGACY`, both syntaxes can appear in the same string, and legacy codes are
+converted the same way regardless of what else the string contains:
+
+```java
+Colorize.init(Dialect.LEGACY);
+
+Colorize.color("&aGreen and <bold>bold");     // both apply
+Colorize.color("&7Just legacy");              // grey
+```
+
+Unknown MiniMessage tags render as literal text rather than throwing, so a message like
+`"Press <shift> to sneak"` is safe.
+
+> **Note on legacy formatting:** legacy treats a colour code as a reset of formatting,
+> so `&l&aX` is green and not bold. MiniMessage nests instead, so after conversion
+> `<bold><green>X` is bold *and* green. Strings that rely on the legacy reset will show
+> extra formatting.
+
+### Inserting values safely
+
+Pass dynamic values as `TagResolver`s rather than concatenating them into the template:
+
+```java
+Component greeting = Colorize.color("<gray>Welcome, <name>",
         Placeholder.unparsed("name", player.getName()));
-player.sendMessage(msg);
 ```
 
-Pass dynamic values as `TagResolver`s rather than substituting them into the
-template first. A value containing `<red>` would otherwise change the formatting,
-and one containing `<click:run_command:…>` would do considerably worse. Where a
-resolver is impractical, `Colorize.escape(value)` makes the value literal.
+Substituting a value into the string first means the value is then parsed as markup — a
+player whose name contains `<red>` would change the message's colours, and one
+containing a `<click:run_command:…>` tag would make the line clickable. Passing values
+as resolvers keeps them as data.
 
-`toLegacy(Component)` exists for APIs that will not take a Component. It is lossy —
-hover events, click events and fonts do not survive. On Paper you should not need it.
+Where a resolver is impractical, escape the value:
 
-### Known limitation
+```java
+String safe = Colorize.escape(untrustedValue);
+Component line = Colorize.color("<gray>Reported: " + safe);
+```
 
-Legacy treats a colour code as a reset of formatting, so `&l&aX` is green and not
-bold. MiniMessage nests, so the converted `<bold><green>X` is bold green. Strings
-relying on legacy reset semantics render with extra formatting.
+### Converting back
 
-## Logging
+```java
+Colorize.serialize(component);   // Component -> MiniMessage string, lossless
+Colorize.plain("&aHello");       // -> "Hello", formatting removed, dialect-aware
+Colorize.strip("<green>Hello");  // -> "Hello", removes MiniMessage tags only
+Colorize.toLegacy(component);    // Component -> §-coded string, lossy
+```
+
+`plain` is what you want for log files and anything else that cannot show colour, since
+it renders through the configured dialect first. `strip` works on the raw string and so
+leaves legacy codes in place.
+
+`toLegacy` is only for APIs that will not take a `Component`; hover events, click
+events and fonts do not survive it.
+
+---
+
+## Logger
+
+### Setup
 
 ```java
 Logger.builder()
-      .prefix("<dark_gray>[<white>Simple<green>Lobby<dark_gray>]</dark_gray> ")
-      .level(config.logLevel)
-      .trace(getDataFolder())    // optional: daily file under logs/
-      .showCaller(true)          // default
-      .build();
-
-Logger.info("Plugin Started!");
+        .prefix("<dark_gray>[<white>My<green>Plugin<dark_gray>]</dark_gray> ")
+        .level(LogLevel.INFO)
+        .build();
 ```
 
-The trace file keeps one writer open rather than reopening per line, so it needs
-`Logger.close()` in `onDisable`.
+| Method | Default | |
+|---|---|---|
+| `prefix(String)` | — | required; MiniMessage. Pass `""` for no prefix |
+| `level(LogLevel)` | `INFO` | `DEBUG`, `INFO`, `WARN`, `ERROR` |
+| `trace(File)` | off | plugin data folder; see [Trace file](#trace-file) |
+| `showCaller(boolean)` | `true` | include the calling class name |
 
-`Logger.setLevel(...)` changes the threshold on its own — the level normally comes
-from config, so `/reload` has to change it without reopening the trace file.
-
-An optional `LogAction` tags what kind of work a line came from, independent of the
-class name. Implement it with a private enum where a class does several distinct
-things; skip it where it would just repeat the class name:
+Then:
 
 ```java
-private enum Action implements LogAction { SETUP, CLOSE, QUERY }
+Logger.debug("Loaded 3 arenas");
+Logger.info("Connected to MySQL");
+Logger.warn("Config value out of range, using default");
+Logger.error("Could not save data: " + e.getMessage());
 
-Logger.info(Action.SETUP, "Connected to MySQL");
-Logger.debug("No action tag needed here");
+Logger.system("");                       // no level tag, no caller, ignores the level
+Logger.system("<green>  MyPlugin v1.0");
 ```
+
+`system` is for startup banners — it always prints and adds no decoration beyond the
+prefix.
+
+Output looks like:
+
+```
+[MyPlugin] [ArenaManager] Loaded 3 arenas
+[MyPlugin] [DEBUG] [SlotManager] Slot 4 released
+```
+
+Message bodies go through `Colorize`, so if your plugin uses `Dialect.LEGACY` you can
+log with `&` codes.
+
+To change the level at runtime — a `/reload` command, for example — without reopening
+the trace file:
+
+```java
+Logger.setLevel(config.logLevel);
+```
+
+### Log actions
+
+An optional tag says *what kind of work* a line came from, independent of the class
+name. Implement `LogAction` with a private enum:
+
+```java
+public final class StorageManager {
+
+    private enum Action implements LogAction {
+        SETUP, CLOSE, QUERY
+    }
+
+    public void connect() {
+        Logger.info(Action.SETUP, "Connected to MySQL");
+    }
+
+    public void query(final String sql) {
+        Logger.debug(Action.QUERY, "Running: " + sql);
+    }
+}
+```
+
+```
+[MyPlugin] [StorageManager] [SETUP] Connected to MySQL
+```
+
+Enums provide `name()` already, so there is nothing to implement beyond the constants.
+Tags make logs greppable by operation rather than by class, which survives renaming a
+class.
+
+Worth skipping where a class only does one kind of work — the caller name is already on
+every line, so a single-constant tag just repeats it. Use the overloads without a tag
+there.
+
+### Trace file
+
+Pass the plugin data folder to also write every emitted line to
+`<dataFolder>/logs/trace-yyyy-MM-dd.log`, with colour removed:
+
+```java
+Logger.builder()
+        .prefix("<gray>[MyPlugin]</gray> ")
+        .level(LogLevel.DEBUG)
+        .trace(getDataFolder())
+        .build();
+```
+
+```
+[14:32:07] [INFO] [StorageManager] [SETUP] Connected to MySQL
+[14:32:09] [DEBUG] [SlotManager] Slot 4 released
+```
+
+The writer stays open, so close it on shutdown:
+
+```java
+@Override
+public void onDisable() {
+    Logger.close();
+}
+```
+
+`close()` is safe to call when no trace file is open.
+
+---
+
+## Full example
+
+```java
+public final class MyPlugin extends JavaPlugin {
+
+    private Config configuration;
+
+    @Override
+    public void onEnable() {
+
+        // Legacy because earlier versions of this plugin shipped & codes
+        Colorize.init(Dialect.LEGACY);
+
+        Logger.builder()
+                .prefix("<dark_gray>[<white>My<green>Plugin<dark_gray>]</dark_gray> ")
+                .level(LogLevel.INFO)
+                .trace(getDataFolder())
+                .build();
+
+        Logger.system("<green>  MyPlugin v" + getDescription().getVersion());
+
+        this.configuration = loadConfig();
+        Logger.setLevel(configuration.logLevel);
+
+        Logger.info("Enabled");
+    }
+
+    @Override
+    public void onDisable() {
+        Logger.close();
+    }
+}
+```
+
+```java
+public final class JoinListener implements Listener {
+
+    private enum Action implements LogAction {
+        JOIN, QUIT
+    }
+
+    @EventHandler
+    public void onJoin(final PlayerJoinEvent event) {
+
+        Player player = event.getPlayer();
+
+        event.joinMessage(Colorize.color("<gray>+ <white><name>",
+                Placeholder.unparsed("name", player.getName())));
+
+        player.sendMessage(Colorize.color(configuration.welcome,
+                Placeholder.unparsed("player", player.getName())));
+
+        Logger.debug(Action.JOIN, "Greeted " + player.getName());
+    }
+}
+```
+
+---
+
+## Notes
+
+Configuration set through `Colorize.init` and `Logger.builder` is process-wide. Because
+each plugin relocates the library into its own package, that state is per-plugin rather
+than shared across the server.
+
+---
+
+## Licence
+
+MIT
