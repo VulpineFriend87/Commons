@@ -13,12 +13,19 @@ import java.util.regex.Pattern;
  * the same string</em> contains angle brackets, so appending a MiniMessage prefix to a
  * legacy message would change how the message parses.</p>
  *
- * <h2>Known limitation</h2>
- * <p>Legacy treats a colour code as a full reset of formatting, so {@code &l&aX} is
- * green and <em>not</em> bold. MiniMessage nests instead, so the converted
- * {@code <bold><green>X} is bold green. Strings that rely on the legacy reset will
- * render with extra formatting. Emulating it would mean tracking state across the whole
- * string, so it is documented rather than worked around.</p>
+ * <h2>Colour codes clear formatting</h2>
+ * <p>The two syntaxes disagree about what a colour means. In legacy a colour code is
+ * also a full reset, so {@code &l&aX} is green and <em>not</em> bold. MiniMessage
+ * nests instead, and {@code <bold><green>X} stays bold until something closes it.</p>
+ *
+ * <p>Translating a colour to a bare tag therefore leaks formatting into everything
+ * that follows: a prefix such as {@code &7[&f&lS&a&lL&7] &aHello} would render the
+ * whole message bold, because nothing ever closes the {@code <bold>}. So every colour
+ * is emitted as {@code <reset>} followed by the colour, which is what legacy means.</p>
+ *
+ * <p>The consequence for mixed strings is that a legacy colour also closes any
+ * MiniMessage tag open at that point — a gradient, a hover event. That is the legacy
+ * contract applied consistently, and the reason to reach for one syntax per string.</p>
  */
 public final class LegacyConverter {
 
@@ -53,10 +60,10 @@ public final class LegacyConverter {
             for (int group = 1; group <= 6; group++) {
                 hex.append(match.group(group));
             }
-            return "<" + hex + ">";
+            return "<reset><" + hex + ">";
         });
 
-        out = AMPERSAND_HEX.matcher(out).replaceAll("<#$1>");
+        out = AMPERSAND_HEX.matcher(out).replaceAll("<reset><#$1>");
 
         Matcher matcher = CODE.matcher(out);
         StringBuilder result = new StringBuilder(out.length());
@@ -88,24 +95,28 @@ public final class LegacyConverter {
                 || CODE.matcher(input).find();
     }
 
+    /**
+     * Colours carry a {@code <reset>} because that is what they mean in legacy;
+     * format codes only add, so they stand alone.
+     */
     private static String tagFor(final char code) {
         return switch (code) {
-            case '0' -> "<black>";
-            case '1' -> "<dark_blue>";
-            case '2' -> "<dark_green>";
-            case '3' -> "<dark_aqua>";
-            case '4' -> "<dark_red>";
-            case '5' -> "<dark_purple>";
-            case '6' -> "<gold>";
-            case '7' -> "<gray>";
-            case '8' -> "<dark_gray>";
-            case '9' -> "<blue>";
-            case 'a' -> "<green>";
-            case 'b' -> "<aqua>";
-            case 'c' -> "<red>";
-            case 'd' -> "<light_purple>";
-            case 'e' -> "<yellow>";
-            case 'f' -> "<white>";
+            case '0' -> "<reset><black>";
+            case '1' -> "<reset><dark_blue>";
+            case '2' -> "<reset><dark_green>";
+            case '3' -> "<reset><dark_aqua>";
+            case '4' -> "<reset><dark_red>";
+            case '5' -> "<reset><dark_purple>";
+            case '6' -> "<reset><gold>";
+            case '7' -> "<reset><gray>";
+            case '8' -> "<reset><dark_gray>";
+            case '9' -> "<reset><blue>";
+            case 'a' -> "<reset><green>";
+            case 'b' -> "<reset><aqua>";
+            case 'c' -> "<reset><red>";
+            case 'd' -> "<reset><light_purple>";
+            case 'e' -> "<reset><yellow>";
+            case 'f' -> "<reset><white>";
             case 'k' -> "<obfuscated>";
             case 'l' -> "<bold>";
             case 'm' -> "<strikethrough>";

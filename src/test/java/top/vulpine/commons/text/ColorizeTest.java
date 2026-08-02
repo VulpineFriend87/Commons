@@ -2,6 +2,7 @@ package top.vulpine.commons.text;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -112,5 +113,53 @@ class ColorizeTest {
         Colorize.init(Dialect.MODERN);
         Component original = Colorize.color("<green>hello <bold>world");
         assertEquals(plain(original), plain(Colorize.color(Colorize.serialize(original))));
+    }
+
+    /**
+     * A purely legacy string has one correct rendering: whatever the legacy
+     * serializer produces. Comparing against it is stricter than asserting on a
+     * hand-written expectation, and it is the definition of "accepts legacy
+     * natively".
+     */
+    private static void rendersLikeLegacy(final String input) {
+        Colorize.init(Dialect.LEGACY);
+        assertEquals(
+                legacy(LegacyComponentSerializer.legacyAmpersand().deserialize(input)),
+                legacy(Colorize.color(input)),
+                "legacy input should render exactly as legacy: " + input);
+    }
+
+    private static String legacy(final Component component) {
+        return LegacyComponentSerializer.legacySection().serialize(component);
+    }
+
+    @Test
+    @DisplayName("a colour code clears formatting, the way legacy does")
+    void colourResetsFormatting() {
+        rendersLikeLegacy("&l&aX");
+    }
+
+    @Test
+    @DisplayName("formatting from a prefix does not bleed into the message")
+    void formattingDoesNotBleed() {
+        rendersLikeLegacy("&7[&f&lS&a&lL&7] &aYou have been teleported.");
+    }
+
+    @Test
+    @DisplayName("&r clears colour as well as formatting")
+    void resetCode() {
+        rendersLikeLegacy("&a&lbold green&rplain");
+    }
+
+    @Test
+    @DisplayName("hex codes reset formatting too")
+    void hexResetsFormatting() {
+        rendersLikeLegacy("&l&#ff00ffX");
+    }
+
+    @Test
+    @DisplayName("a format code keeps the colour it follows")
+    void formatKeepsColour() {
+        rendersLikeLegacy("&a&lstill green");
     }
 }
