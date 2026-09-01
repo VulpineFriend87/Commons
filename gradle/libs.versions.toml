@@ -2,18 +2,23 @@ metadata.format.version = "1.1"
 
 [versions]
 
-# Paper API
-# Compiled against the oldest supported platform. 1.18.2 brings adventure-bom 4.11.0,
+# Adventure
+# Compiled against the oldest supported platform. Paper 1.18.2 brings adventure-bom 4.11.0,
 # which is the first version with MiniMessage and TagResolver in the Paper API.
-paper = "1.18.2-R0.1-SNAPSHOT"
+# Velocity ships 4.25.0, so 4.11.0 is the floor across both.
+adventure = "4.11.0"
 
 # Testing
-junit = "6.1.3"
+junit = "6.1.2"
 
 [libraries]
 
 # CompileOnly Dependencies
-paper = { group = "io.papermc.paper", name = "paper-api", version.ref = "paper" }
+adventure-api = { module = "net.kyori:adventure-api", version.ref = "adventure" }
+adventure-minimessage = { module = "net.kyori:adventure-text-minimessage", version.ref = "adventure" }
+adventure-serializer-legacy = { module = "net.kyori:adventure-text-serializer-legacy", version.ref = "adventure" }
+adventure-serializer-plain = { module = "net.kyori:adventure-text-serializer-plain", version.ref = "adventure" }
+adventure-logger = { module = "net.kyori:adventure-text-logger-slf4j", version.ref = "adventure" }
 
 # Testing
 junit = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }

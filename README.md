@@ -1,13 +1,14 @@
 # Commons
 
-Text rendering and console logging for Paper plugins.
+Text rendering and console logging for Paper and Velocity plugins.
 
 - **`Colorize`** — turns configured strings into Adventure `Component`s, with optional
   support for legacy `&` colour codes alongside MiniMessage.
-- **`Logger`** — a prefixed console logger with levels, an optional daily trace file,
+- **`Logger`** — a console logger with levels, an optional daily trace file,
   and grep-friendly tags.
 
-**Requires Paper 1.18.2 or newer.** Adventure and MiniMessage come from the server.
+**Requires Paper 1.18.2 or newer, or Velocity 3.** Adventure and MiniMessage come from the
+platform; both ship everything this library needs.
 
 ---
 
@@ -22,6 +23,7 @@ Text rendering and console logging for Paper plugins.
   - [Setup](#setup)
   - [Log actions](#log-actions)
   - [Trace file](#trace-file)
+  - [On Velocity](#on-velocity)
 - [Full example](#full-example)
 
 ---
@@ -35,7 +37,7 @@ repositories {
 }
 
 dependencies {
-    implementation("top.vulpine:commons:0.1.0")
+    implementation("top.vulpine:commons:0.3.0")
     compileOnly("io.papermc.paper:paper-api:1.18.2-R0.1-SNAPSHOT")
 }
 
@@ -45,9 +47,11 @@ tasks.shadowJar {
 ```
 
 Relocate `top.vulpine.commons` so two plugins on the same server do not share
-configuration. Do **not** relocate `net.kyori.adventure` — Paper provides it
-unrelocated, and a relocated `Component` will not satisfy Paper's own method
+configuration. Do **not** relocate `net.kyori.adventure` — the platform provides it
+unrelocated, and a relocated `Component` will not satisfy the platform's own method
 signatures.
+
+On Velocity, swap the `paper-api` line for `velocity-api`; nothing else changes.
 
 ---
 
@@ -150,17 +154,24 @@ events and fonts do not survive it.
 
 ```java
 Logger.builder()
-        .prefix("<dark_gray>[<white>My<green>Plugin<dark_gray>]</dark_gray> ")
+        .logger(getComponentLogger())
         .level(LogLevel.INFO)
         .build();
 ```
 
 | Method | Default | |
 |---|---|---|
-| `prefix(String)` | — | required; MiniMessage. Pass `""` for no prefix |
+| `logger(ComponentLogger)` | — | required; where lines are written |
 | `level(LogLevel)` | `INFO` | `DEBUG`, `INFO`, `WARN`, `ERROR` |
 | `trace(File)` | off | plugin data folder; see [Trace file](#trace-file) |
 | `showCaller(boolean)` | `true` | include the calling class name |
+
+`ComponentLogger` takes Adventure components directly, so nothing is flattened to a
+string on the way out. `Plugin#getComponentLogger()` has existed since Paper 1.18.2.
+
+There is no prefix setting. Naming the source of a line is the logging framework's job,
+and both platforms already put the plugin name on every line. Levels are passed through
+too, so a `warn` is filterable as a warning in the server's own log.
 
 Then:
 
@@ -174,14 +185,14 @@ Logger.system("");                       // no level tag, no caller, ignores the
 Logger.system("<green>  MyPlugin v1.0");
 ```
 
-`system` is for startup banners — it always prints and adds no decoration beyond the
-prefix.
+`system` is for startup banners — it always prints, whatever the level is set to, and
+adds no caller or action decoration.
 
 Output looks like:
 
 ```
-[MyPlugin] [ArenaManager] Loaded 3 arenas
-[MyPlugin] [DEBUG] [SlotManager] Slot 4 released
+[12:00:00 INFO]: [MyPlugin] [ArenaManager] Loaded 3 arenas
+[12:00:01 DEBUG]: [MyPlugin] [SlotManager] Slot 4 released
 ```
 
 Message bodies go through `Colorize`, so if your plugin uses `Dialect.LEGACY` you can
@@ -193,6 +204,21 @@ the trace file:
 ```java
 Logger.setLevel(config.logLevel);
 ```
+
+### On Velocity
+
+Nothing changes. Velocity injects a `ComponentLogger` into the plugin, so pass that one
+instead:
+
+```java
+@Inject
+public MyPlugin(final ComponentLogger logger) {
+    Logger.builder().logger(logger).build();
+}
+```
+
+`Colorize` needs nothing either: Velocity ships Adventure, MiniMessage and both
+serializers, so it behaves identically on both platforms.
 
 ### Log actions
 
@@ -235,7 +261,7 @@ Pass the plugin data folder to also write every emitted line to
 
 ```java
 Logger.builder()
-        .prefix("<gray>[MyPlugin]</gray> ")
+        .logger(getComponentLogger())
         .level(LogLevel.DEBUG)
         .trace(getDataFolder())
         .build();
@@ -273,7 +299,7 @@ public final class MyPlugin extends JavaPlugin {
         Colorize.init(Dialect.LEGACY);
 
         Logger.builder()
-                .prefix("<dark_gray>[<white>My<green>Plugin<dark_gray>]</dark_gray> ")
+                .logger(getComponentLogger())
                 .level(LogLevel.INFO)
                 .trace(getDataFolder())
                 .build();

@@ -5,19 +5,26 @@ plugins {
 
 repositories {
     mavenCentral()
-    maven("https://repo.papermc.io/repository/maven-public/")
 }
 
 dependencies {
-    compileOnly(libs.paper)
+    compileOnly(libs.adventure.api)
+    compileOnly(libs.adventure.minimessage)
+    compileOnly(libs.adventure.serializer.legacy)
+    compileOnly(libs.adventure.serializer.plain)
+    compileOnly(libs.adventure.logger)
 
-    testImplementation(libs.paper)
+    testImplementation(libs.adventure.api)
+    testImplementation(libs.adventure.minimessage)
+    testImplementation(libs.adventure.serializer.legacy)
+    testImplementation(libs.adventure.serializer.plain)
+    testImplementation(libs.adventure.logger)
     testImplementation(libs.junit)
     testRuntimeOnly(libs.junit.launcher)
 }
 
 group = "top.vulpine"
-version = "0.2.0"
+version = "0.3.0"
 description = "Commons"
 
 java {

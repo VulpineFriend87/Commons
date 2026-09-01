@@ -3,7 +3,7 @@ package top.vulpine.commons.log;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextColor;
-import org.bukkit.Bukkit;
+import net.kyori.adventure.text.logger.slf4j.ComponentLogger;
 import top.vulpine.commons.text.Colorize;
 
 import java.io.BufferedWriter;
@@ -20,14 +20,29 @@ import java.time.format.DateTimeFormatter;
 /**
  * Console logger with an optional on-disk trace file.
  *
- * <p>Each line carries the plugin prefix, the calling class, an optional
- * {@link LogAction} tag, and the message. Lines are assembled as
- * {@link Component}s rather than concatenated strings, so a message containing a
- * stray {@code <} cannot break the prefix and the prefix's syntax cannot change how
- * the message parses.</p>
+ * <p>Each line carries the calling class, an optional {@link LogAction} tag, and the
+ * message. Lines are assembled as {@link Component}s rather than concatenated
+ * strings, so a message containing a stray {@code <} cannot break the line.</p>
  *
  * <p>Static state is per-plugin, since each consumer relocates this library into
  * its own package.</p>
+ *
+ * <h2>Platforms</h2>
+ * <p>Everything goes through a {@link ComponentLogger}, which both Paper and
+ * Velocity provide and which takes {@link Component}s directly — nothing is
+ * serialized to a string on the way out, so hover text, click events and colour all
+ * survive.</p>
+ *
+ * <pre>{@code
+ * // Paper — Plugin#getComponentLogger() has existed since 1.18.2
+ * Logger.builder().logger(getComponentLogger()).level(config.logLevel).build();
+ *
+ * // Velocity — the proxy injects one
+ * Logger.builder().logger(logger).level(config.logLevel).build();
+ * }</pre>
+ *
+ * <p>The plugin name comes from the logger itself, which is why there is no prefix
+ * setting: naming the source of a line is the logging framework's job.</p>
  */
 public final class Logger {
 
@@ -37,8 +52,8 @@ public final class Logger {
     private static final Object TRACE_LOCK = new Object();
 
     private static volatile LogLevel threshold = LogLevel.INFO;
-    private static volatile Component prefix = Component.empty();
     private static volatile boolean showCaller = true;
+    private static volatile ComponentLogger console;
 
     private static BufferedWriter trace;
 
@@ -50,7 +65,7 @@ public final class Logger {
      *
      * <pre>{@code
      * Logger.builder()
-     *       .prefix("<gray>[SimpleLobby]</gray> ")
+     *       .logger(getComponentLogger())
      *       .level(config.logLevel)
      *       .trace(getDataFolder())
      *       .build();
@@ -68,7 +83,7 @@ public final class Logger {
      */
     public static final class Builder {
 
-        private String prefixTemplate;
+        private ComponentLogger logger;
         private LogLevel level = LogLevel.INFO;
         private File traceFolder;
         private boolean caller = true;
@@ -77,17 +92,16 @@ public final class Logger {
         }
 
         /**
-         * Sets the prefix that opens every line. Required.
+         * Where lines are written. Required.
          *
-         * <p>Pass {@code ""} for no prefix — that is a deliberate choice rather
-         * than a default, which is why the value has to be supplied.</p>
+         * <p>On Paper this is {@code getComponentLogger()}; on Velocity it is the
+         * logger the proxy injects into the plugin.</p>
          *
-         * @param template the prefix, in MiniMessage; e.g.
-         *        {@code "<gray>[SimpleLobby]</gray> "}
+         * @param value the platform's component logger
          * @return this builder
          */
-        public Builder prefix(final String template) {
-            this.prefixTemplate = template;
+        public Builder logger(final ComponentLogger value) {
+            this.logger = value;
             return this;
         }
 
@@ -133,16 +147,17 @@ public final class Logger {
          * Applies the settings. Replaces any previous configuration, closing an
          * already-open trace file first.
          *
-         * @throws IllegalStateException if no prefix was set
+         * @throws IllegalStateException if no logger was set
          */
         public void build() {
 
-            if (prefixTemplate == null) {
+            if (logger == null) {
                 throw new IllegalStateException(
-                        "Logger.builder() requires prefix(...); pass \"\" for no prefix");
+                        "Logger.builder() requires logger(...); on Paper pass getComponentLogger(), "
+                                + "on Velocity the injected ComponentLogger");
             }
 
-            prefix = Colorize.color(prefixTemplate);
+            console = logger;
             threshold = level;
             showCaller = caller;
 
@@ -182,7 +197,7 @@ public final class Logger {
     }
 
     /**
-     * Changes the level threshold on its own, leaving the prefix and trace file
+     * Changes the level threshold on its own, leaving the logger and trace file
      * alone.
      *
      * <p>The level usually comes from config, so a {@code /reload} command needs to
@@ -236,13 +251,15 @@ public final class Logger {
     }
 
     /**
-     * Writes a line with the prefix but no level tag, caller, or color, ignoring
-     * the threshold. For startup banners.
+     * Writes a line with no level tag or caller, ignoring the threshold.
+     *
+     * <p>For startup banners and anything else that must appear even when an
+     * operator has raised the level to {@code ERROR}.</p>
      *
      * @param message the message
      */
     public static void system(final String message) {
-        Bukkit.getConsoleSender().sendMessage(prefix.append(Colorize.color(message)));
+        console().info(Colorize.color(message));
     }
 
     /**
@@ -260,7 +277,7 @@ public final class Logger {
 
         String caller = showCaller ? callerClass() : null;
 
-        Component line = prefix;
+        Component line = Component.empty();
 
         if (caller != null) {
             line = line.append(bracket(caller, NamedTextColor.AQUA));
@@ -270,10 +287,38 @@ public final class Logger {
             line = line.append(bracket(action.name(), NamedTextColor.YELLOW));
         }
 
-        Bukkit.getConsoleSender().sendMessage(
-                line.append(Colorize.color(message).colorIfAbsent(colorFor(level))));
+        emit(level, line.append(Colorize.color(message).colorIfAbsent(colorFor(level))));
 
         writeTrace(level, caller, action, message);
+    }
+
+    /**
+     * Hands one assembled line to the platform at the matching level, so a warning
+     * is filterable as a warning in the server's own log rather than arriving as
+     * undifferentiated output.
+     */
+    private static void emit(final LogLevel level, final Component line) {
+
+        ComponentLogger target = console();
+
+        switch (level) {
+            case DEBUG -> target.debug(line);
+            case INFO -> target.info(line);
+            case WARN -> target.warn(line);
+            case ERROR -> target.error(line);
+        }
+    }
+
+    private static ComponentLogger console() {
+
+        ComponentLogger target = console;
+
+        if (target == null) {
+            throw new IllegalStateException(
+                    "Logger was used before Logger.builder()...build() was called");
+        }
+
+        return target;
     }
 
     private static Component bracket(final String text, final TextColor color) {
