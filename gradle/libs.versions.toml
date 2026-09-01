@@ -6,7 +6,7 @@ metadata.format.version = "1.1"
 # Compiled against the oldest supported platform. Paper 1.18.2 brings adventure-bom 4.11.0,
 # which is the first version with MiniMessage and TagResolver in the Paper API.
 # Velocity ships 4.25.0, so 4.11.0 is the floor across both.
-adventure = "4.11.0"
+adventure = "5.2.0"
 
 # Testing
 junit = "6.1.2"
