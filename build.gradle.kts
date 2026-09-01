@@ -24,7 +24,7 @@ dependencies {
 }
 
 group = "top.vulpine"
-version = "0.2.0"
+version = "0.3.0"
 description = "Commons"
 
 java {

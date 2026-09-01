@@ -37,7 +37,7 @@ repositories {
 }
 
 dependencies {
-    implementation("top.vulpine:commons:0.1.0")
+    implementation("top.vulpine:commons:0.3.0")
     compileOnly("io.papermc.paper:paper-api:1.18.2-R0.1-SNAPSHOT")
 }
 
