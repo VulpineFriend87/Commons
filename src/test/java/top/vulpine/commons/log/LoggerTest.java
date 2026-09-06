@@ -92,13 +92,10 @@ class LoggerTest {
     }
 
     @Test
-    @DisplayName("each level reaches the platform as that level, so filtering still works")
+    @DisplayName("warnings and errors reach the platform as themselves, so filtering still works")
     void mapsLevels() {
 
         Logger.builder().logger(recorder.logger()).level(LogLevel.DEBUG).build();
-
-        Logger.debug("d");
-        assertEquals("debug", recorder.lastLevel());
 
         Logger.info("i");
         assertEquals("info", recorder.lastLevel());
@@ -108,6 +105,24 @@ class LoggerTest {
 
         Logger.error("e");
         assertEquals("error", recorder.lastLevel());
+    }
+
+    /**
+     * Platforms filter their own logger below info, so debug sent as debug is discarded by the
+     * server before anyone sees it — Paper needs {@code debug=true} in server.properties. An
+     * operator who turned debug on in the plugin would then get silence and no way to tell that
+     * from there being nothing to report, so the plugin's own threshold is the only switch.
+     */
+    @Test
+    @DisplayName("debug goes out as info, so the platform cannot swallow what was asked for")
+    void debugSurvivesThePlatformFilter() {
+
+        Logger.builder().logger(recorder.logger()).level(LogLevel.DEBUG).build();
+
+        Logger.debug("d");
+
+        assertEquals("info", recorder.lastLevel());
+        assertTrue(recorder.lastLine().contains("DEBUG"), "still says which level it is");
     }
 
     @Test

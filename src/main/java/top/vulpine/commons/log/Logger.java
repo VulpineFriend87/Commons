@@ -279,6 +279,12 @@ public final class Logger {
 
         Component line = Component.empty();
 
+        // Debug reaches the platform as info so the server cannot filter it away, which costs it
+        // the one thing that said what it was. Colour alone will not do: a log file keeps none.
+        if (level == LogLevel.DEBUG) {
+            line = line.append(bracket(level.name(), colorFor(level)));
+        }
+
         if (caller != null) {
             line = line.append(bracket(caller, NamedTextColor.AQUA));
         }
@@ -296,13 +302,21 @@ public final class Logger {
      * Hands one assembled line to the platform at the matching level, so a warning
      * is filterable as a warning in the server's own log rather than arriving as
      * undifferentiated output.
+     *
+     * <p>Debug is the exception and goes out as info. Every platform filters its own
+     * logger below info by default — Paper discards it unless {@code debug=true} is
+     * set in server.properties — so a plugin told to log debug would print nothing,
+     * and the operator who asked for it cannot tell that apart from there being
+     * nothing to report. The threshold checked above is the switch that was actually
+     * offered to them, so it is the one that decides, and {@link #log} tags the line
+     * DEBUG so nothing about it reads as ordinary output.</p>
      */
     private static void emit(final LogLevel level, final Component line) {
 
         ComponentLogger target = console();
 
         switch (level) {
-            case DEBUG -> target.debug(line);
+            case DEBUG -> target.info(line);
             case INFO -> target.info(line);
             case WARN -> target.warn(line);
             case ERROR -> target.error(line);
