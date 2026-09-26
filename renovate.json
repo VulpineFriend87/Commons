@@ -6,7 +6,16 @@
   "packageRules": [
     {
       "description": "not a dependency to keep current",
-      "matchPackageNames": ["io.papermc.paper:paper-api"],
+      "matchPackageNames": [
+        "io.papermc.paper:paper-api"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "pinned to the oldest supported platform, not kept current",
+      "matchPackageNames": [
+        "net.kyori:*"
+      ],
       "enabled": false
     }
   ]
